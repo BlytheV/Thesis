@@ -1,4 +1,4 @@
-
+GLM Model described in section 2.3.2. Example here is for the European honeybee. Code was adapted for the other five insects as specified
 library(reshape2)
 library(jagsUI)
 library(xlsx)
@@ -33,7 +33,7 @@ ybug = dcast(idata, po_name + po + point2 ~ species_code , value.var="occ", fill
 #Check to see if there is anything not 0 or 1
 any(ybug==0) & any(ybug==1)
 
-#Subset the data to only include the pollinator observatories the European honeybee has been seen on. Make sure this matches the subset of covariate data on line 32. This will differ for each insect
+#Subset the data to only include the pollinator observatories the European honeybee has been seen on. Make sure this matches the subset of covariate data on line 25. This will differ for each insect
 ybug <- subset(ybug, ybug$po!="3")
 
 #Select insect species (European honeybee)
