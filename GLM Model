@@ -1,0 +1,153 @@
+
+library(reshape2)
+library(jagsUI)
+library(xlsx)
+library(ggplot2)
+library(lubridate)
+
+#Read in insect data
+idata = read.csv("insect_data_v17.csv", 
+                 header=TRUE, sep=",", na.strings=TRUE)
+head(idata)
+
+##Initial addtions and modification to insect data
+
+#Add occupancy column
+idata$occ = 1
+
+#Read in covariate flower data
+cvdata <- read.csv("CV_data_v14.csv",
+                   header = TRUE, sep = ",", na.strings = TRUE)
+head(cvdata)
+
+##Initial addtions and modification to cv data
+
+#Subset to just include the pollinator observatories the European honeybee has been seen on. Remove Brachyscome basaltica (po 3). This will differ for each insect
+cvdata = subset(cvdata, cvdata$po!= "3")
+                
+##Getting the data in the right shape
+
+#Reshape insect data into 2D array
+ybug = dcast(idata, po_name + po + point2 ~ species_code , value.var="occ", fill=0, fun=min) 
+
+#Check to see if there is anything not 0 or 1
+any(ybug==0) & any(ybug==1)
+
+#Subset the data to only include the pollinator observatories the European honeybee has been seen on. Make sure this matches the subset of covariate data on line 32. This will differ for each insect
+ybug <- subset(ybug, ybug$po!="3")
+
+#Select insect species (European honeybee)
+bugmat = ybug[,c("po_name","po", "point2","HYM094")]
+
+#Verify that insect and cv data are aligned by 'point2'
+bugmat$pointcv = cvdata$point2; bugmat
+
+##Prepare data for JAGS
+
+#Number of inference points
+n = length(bugmat$point2)
+
+#Species occurrence data, subset to European honeybee
+bug = bugmat$HYM094
+
+#Standardise the covariate
+cv = cvdata$no.flo.m2
+cv1 = as.vector(cv)
+mu1 = mean(cv1)
+sd1 = sd(cv1)
+x1  = as.vector((cv1-mu1)/sd1)
+
+#Data for model
+jdata = list(n=n, bug=bug, x1 = x1) 
+
+#Write the model code to a text file 
+cat("
+    model{
+    
+    #Priors
+    gmu ~ dnorm(0,0.01) 
+    f ~ dnorm(0,0.01)
+
+     #Inference points loop     
+          for (i in 1:n) {
+    logit(psi[i]) <- gmu + f*x1[i]
+    bug[i] ~ dbern(psi[i])
+    }
+
+    #Derived quantities | Back transform data
+    gocc <- 1/(1+exp(-(gmu)))
+  
+
+    #Finish writing the text file into a document we call modelem.txt
+    }
+    ", file="msom.txt")
+
+#Specify the parameters to be monitored
+params = c("gocc","f", "gmu")
+
+inits = function() {
+  list(gmu=rnorm(1), f=rnorm(1))
+}
+
+#MCMC settings
+ni = 5000
+nt = 1
+nb = 500
+nc = 2
+
+#Call JAGS from R
+mod = jags(jdata, inits, params, "msom.txt", 
+           n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb, seed = 123)
+names(mod)
+print(mod, 2)
+
+file <- paste0("Final_HYM094_GLM_Model_outputs_", gsub(" ", "_", date()), ".xlsx")
+write.xlsx("model_run",
+           sheetName = "Metadata",
+           file = file)
+
+write.xlsx(data.frame(mod$summary),
+           file = file,
+           sheetName = "HYM094",
+           append = TRUE)
+
+##Prepare data for plot
+#Effects
+f = mod$sims.list$f
+gmu = mod$sims.list$gmu
+gocc = mod$sims.list$gocc
+
+mu.f = mean(f)
+mu.gmu = mean(gmu)
+
+#Predictions
+pvv = sort(runif(500,0,500))
+cvvv = (pvv-mu1)/sd1
+ssvv = sample(1:9000, size=1000)
+stcvv = array(dim=c(500,1000))
+
+
+for (i in 1:500) {
+  for (j in 1:1000) {
+    stcvv[i,j] <- plogis(gmu[ssvv[j]] + f[ssvv[j]]*cvvv[i])
+  }  
+}
+
+yvv = plogis(mu.gmu + mu.f*cvvv)
+lvv = apply(stcvv, 1, quantile, prob=0.025, na.rm=TRUE)
+uvv = apply(stcvv, 1, quantile, prob=0.975, na.rm=TRUE)
+
+##Produce plot
+
+pdf("Honeybee_occ_flo_plot.pdf", width = 13, pointsize = 16)
+par(mai=c(1,1,0,0), cex=1.2)
+matplot(pvv, stcvv, type="l", col="white", ylim=c(0,1), xlim=c(0,500), cex.lab=1.3, 
+        las=1, ylab="Pr(Occ)", xlab=expression(paste("")), axes=F, lwd=0.75)
+polygon(c(rev(pvv),pvv),c(rev(lvv),uvv),col="grey", border = NA)
+points(pvv, yvv, type="l", lwd=2, col="black")
+#another points here
+axis(2, at=c(0,0.5,1), labels=c(0,0.5,1), las=1, cex.axis=1.2, padj=.5)
+axis(1, at=c(0,100,200,300,400,500), labels=c("","","","","",""), 
+     las=1, cex.axis=1.2, padj=.5)
+
+dev.off()
