@@ -1,4 +1,7 @@
 
+##GLMM Model as described in section 2.3.1
+#Example for European honeybee
+
 library(reshape2)
 library(jagsUI)
 library(xlsx)
@@ -9,7 +12,7 @@ idata = read.csv("insect_data_v17.csv",
                  header=TRUE, sep=",", na.strings=TRUE)
 head(idata)
 
-##Initial addtions and modification to insect data##
+##Initial addtions and modification to insect data
 
 #1. Add occupancy column
 idata$occ = 1
@@ -22,8 +25,7 @@ ybug = dcast(idata, po_name + po + point2 ~ species_code , value.var="occ", fill
 #Check to see if there is anything not 0 or 1
 any(ybug==0) & any(ybug==1)
 
-#Remove pollinator observatories so it matches the osbervatories in cvdata. 
-#Make sure this subset is the same as in line 32
+#Subset to just include the pollinator observatories the European honeybee has been seen on. Thus remove Brachyscome basaltica (po 3). This will differ for each insect
 ybug <- subset(ybug, ybug$po != "3")
 
 #Select targeted insect species. HYM094 = European honeybee. This will change depending on the insect
@@ -44,7 +46,7 @@ ipo = bugmat[,"ipo"]
 ipo = as.numeric(paste(ipo))
 npo = length(unique(ipo))
 
-#Species occurrence data
+#Species occurrence data. Select the insect
 bug = bugmat$HYM094
 
 #Data for model
@@ -99,12 +101,12 @@ mod = jags(jdata, inits, params, "msom.txt",
 names(mod)
 print(mod, 2)
 
-file <- paste0("Final_Model_outputs_LEP900", gsub(" ", "_", date()), ".xlsx")
+file <- paste0("Final_Model_outputs_European_honeybee", gsub(" ", "_", date()), ".xlsx")
 write.xlsx("model_run", 
            sheetName = "Metadata",
            file = file)
 
 write.xlsx(data.frame(mod$summary), 
            file = file,
-           sheetName = "LEP900.2",
+           sheetName = "HYM094.2",
            append = TRUE)
