@@ -1,6 +1,5 @@
 
-##GLMM Model as described in section 2.3.1
-#Example for European honeybee
+##GLMM Model as described in section 2.3.1. Example here is for the European honeybee. Code was adapted for the other five insects as specified
 
 library(reshape2)
 library(jagsUI)
@@ -110,3 +109,20 @@ write.xlsx(data.frame(mod$summary),
            file = file,
            sheetName = "HYM094.2",
            append = TRUE)
+
+##Produce the plot
+HYM094_results <- read.csv("Final_Model_outputs_European_honeybee.csv")
+
+ggplot(data = HYM094_results) + 
+  geom_pointrange(aes(y=mean,
+                      x=Species,
+                      ymin = X2.5.,
+                      ymax = X97.5.),
+                      lwd=0.4) +
+  annotate("text", x=0.8, y=1.0,label = "b", size = 4) +
+  theme_bw() +
+  labs(x = "Pollinator observatory", y = "Pr(Occ)") + 
+  expand_limits(y = c(0, 1)) + 
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 10))
