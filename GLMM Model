@@ -97,7 +97,7 @@ nc = 2
 
 #Call JAGS from R
 mod = jags(jdata, inits, params, "msom.txt", 
-           n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb)
+           n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb, seed = 123)
 names(mod)
 print(mod, 2)
 
