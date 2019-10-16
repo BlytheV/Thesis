@@ -1,0 +1,47 @@
+##Code to create the observation window plots. One example of an insect not affected by flower density (blue-banded bees) and one of an insect affected by flower density (European honeybee)
+
+##Plot 1. Blue-banded bees plot. Not affected by flower density, so no gradient necessary 
+#Plot 1 adapted to also plot other native bees, and other native butterflies
+
+ggplot(data = HYM096_data, aes(x = po_name,
+                               ymin = rmin,
+                               ymax = rmax,
+                               col = Prob_of_obsv)) +
+  scale_x_discrete(limits = rev(unique(sort(idata$po_name)))) +
+  scale_y_continuous("", breaks = c(0, 91, 182, 273, 365), labels = c("Winter","Spring","Summer","Autumn", ""), c(0, 365)) +
+  geom_linerange(alpha = 1,
+                 size = 1) +
+  scale_colour_manual(values=col_pal_bbb) + 
+  annotate("text", x=12, y=-16,label = "a", size = 4) +
+  scale_colour_manual(values=col_pal, breaks=c("High", "Medium","Low"), name = "Probability of observation") +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_text(size=rel(2))) +
+  theme(axis.title.y=element_blank(), axis.text.x=element_text(size=rel(1), hjust = -1)) +
+  theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank(),  plot.margin = unit(c(0,2,0,2), "lines")) +
+  coord_flip()
+  
+  ##Plot 2. European honeybee. Affected by flower density, so I include a gradient corresponding to flower density. 
+  #Plot 2 adapted to also plot hoverfly and cabbage white butterfly
+  
+  gplot(HYM094_data2, aes(x = po_name,
+                                   y = ref_day,
+                                   col = Prob_of_obsv)) +
+  scale_x_discrete(limits = rev(unique(sort(idata$po_name)))) +
+  scale_y_continuous("", breaks = c(0, 91, 182, 273, 365), labels = c("", "Winter","Spring","Summer","Aumtumn"), c(0, 365)) +
+  geom_point(aes(alpha = mean_flo_density),
+             size = 1, shape = 15) +
+  #Add a point where flower density is equal to 1, and thus likelihood of observation peaks#            
+  geom_point(data = HYM094_data2[HYM094_data2$mean_flo_density == 1,],
+             col = "black",
+             pch=-0x7CL, size = 3, position = position_nudge(y = -0.1)) +
+  scale_colour_manual(values=col_pal) + 
+  annotate("text", x=12, y=-16,label = "a", size = 4) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_text(size=rel(2))) +
+  theme(axis.title.y=element_blank(), axis.text.x=element_text(size=rel(1), hjust = 1.5)) +
+  theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank(),  plot.margin = unit(c(0,2,0,2), "lines")) +
+  theme(legend.position = "top",
+        axis.title=element_blank(),
+        panel.grid.major.y = element_blank()) +
+  theme(legend.position = "none") +
+  coord_flip()
