@@ -1,0 +1,238 @@
+#Flower density imputation model as described in section 2.3.3.
+
+library(jagsUI)
+library(scales)
+
+#Read in the flower density data
+cvdata = read.csv("CV_data_v15.csv", 
+                  header = TRUE,
+                  sep = ",",
+                  na.strings = TRUE) 
+
+##Function##
+
+Flower_density <- function(data, po_number, ni = 100000, nt = 1, nb = 10000, nc = 3, ref_day = 1, directory_name) {
+  
+  
+  
+  #extract name
+  po_name <- unique(data[data$po == paste0(po_number), "po_name"])
+  
+  #Create vector of all days in the year
+  x_year <- 1:365
+  
+  #Create vector of all days in the year that were surveyed
+  x_all <- sort(unique(data$year_day))
+  
+  #Create vector of days that the target observatory was flowering
+  x_obs <- sort(data[data$po == paste0(po_number), "year_day"])
+  print(x_obs)
+  
+  #Create vector of observations for all survey days
+  y_all <- rep(0, length(x_all))
+  
+  #Add observed values to y_all variable
+  
+  if(po_number == 10) {
+    y_all[which(x_all %in% x_obs)] <- as.vector(na.omit(data[data$po == paste0(po_number), "no.flo.m2"]))[-11] #Olearia correction 
+  } 
+  if(po_number == 3)  {
+    y_all[which(x_all %in% x_obs)] <- as.vector(na.omit(data[data$po == paste0(po_number), "no.flo.m2"]))[-8] #Brachyscome correction
+  } else {
+    y_all[which(x_all %in% x_obs)] <- as.vector(na.omit(data[data$po == paste0(po_number), "no.flo.m2"]))
+  }
+  
+  #Add indicator variable to mark days that flowers were observed
+  y_bin <- ifelse(y_all > 0, 1, 0)
+  
+  #Create vector of observed flowering measurements
+  y_obs <- as.vector(na.omit(data[data$po == paste0(po_number), "no.flo.m2"]))
+  print(y_obs)
+  
+  
+  
+  #Standardise the x variables to the mean and standard deviation of the entire year
+  x_mean <- mean(x_year)
+  x_sd <- sd(x_year)
+  
+  x_year_s <- (x_year - x_mean) / x_sd
+  x_all_s <- (x_all - x_mean) / x_sd
+  x_obs_s <- (x_obs - x_mean) / x_sd
+  
+  #Data for model
+  jdata = list(n_obs = length(x_obs_s),
+               n_all = length(x_all_s),
+               n_sim = length(x_year_s),
+               y_bin = y_bin,
+               y_obs = y_obs,
+               x_all_s = x_all_s,
+               x_obs_s = x_obs_s,
+               x_year_s = x_year_s)
+  
+  #Write the model code to a text file 
+  cat("
+    model{
+    
+    #Priors
+    a_mu ~ dnorm(0, 0.01) 
+    b_mu ~ dnorm(0, 0.01)
+    c_mu ~ dnorm(0, 0.01)
+    a_phi ~ dnorm(0, 0.01) 
+    b_phi ~ dnorm(0, 0.01)
+    c_phi ~ dnorm(0, 0.01)
+    tau <- pow(sigma, -2)
+    sigma ~ dunif(0, 10)
+
+    #Inference points for observations  
+    for (i in 1:n_obs) {
+      y_obs[i] ~ dnorm(mu[i], tau) T(0, )
+      mu[i] <- a_mu + b_mu*sin(1.821272*x_obs_s[i]) + c_mu*cos(1.821272*x_obs_s[i])
+    }
+    
+    #Inference points for flowering probability
+    for (i in 1:n_all) {
+      y_bin[i] ~ dbern(phi[i])
+      logit(phi[i]) <- a_phi + b_phi*sin(1.821272*x_all_s[i]) + c_phi*cos(1.821272*x_all_s[i])
+    }
+    
+    #Simulation and prediction for responses
+    for (i in 1:n_sim) {
+      y_sim[i] ~ dnorm(mu_sim[i], tau) T(0,)
+      z_sim[i] ~ dbern(phi_sim[i])
+      mu_sim[i] <- a_mu + b_mu*sin(1.821272*x_year_s[i]) + c_mu*cos(1.821272*x_year_s[i])
+      logit(phi_sim[i]) <- a_phi + b_phi*sin(1.821272*x_year_s[i]) + c_phi*cos(1.821272*x_year_s[i])
+      predicted[i] <- y_sim[i] * z_sim[i]
+    }
+    
+    #Finish writing the text file into a document we call modelem.txt
+    }
+    ", file="msom.txt")
+  
+  #Specify the parameters to be monitored
+  params = c("a_mu", "b_mu", "c_mu", "a_phi", "b_phi", "c_phi", "predicted", "y_obs", "y_bin", "y_sim", "z_sim")
+  
+  
+  inits = function() {
+    list(a_mu = rnorm(1),
+         b_mu = rnorm(1),
+         c_mu = rnorm(1),
+         a_phi = rnorm(1),
+         b_phi =rnorm(1),
+         c_phi = rnorm(1),
+         sigma = runif(1))
+  }
+  
+  #MCMC settings
+  ni = ni
+  nt = nt
+  nb = nb
+  nc = nc
+  
+  #Call JAGS from R
+  mod <- jagsUI::jags(jdata, inits, params, "msom.txt", 
+                      n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb)
+  print(mod, 2)
+  
+  
+  
+  ##Wrangle data
+  raw_mean_flo_density <- mod$mean$predicted
+  
+  flo_density_data <- data.frame("day_of_year" = x_year, 
+                                 raw_mean_flo_density, 
+                                 "mean_flo_density" = scales::rescale(raw_mean_flo_density),
+                                 "z_sim" = mod$mean$z_sim,
+                                 "mean_pred" = mod$mean$predicted,
+                                 "y_sim" = mod$mean$y_sim,
+                                 "q97_5" = mod$q97.5$predicted)
+  
+  
+  lower <- quantile(flo_density_data$mean_flo_density, 0.1)
+  flo_density_data$mean_flo_density <- ifelse(flo_density_data$mean_flo_density < lower, 0, flo_density_data$mean_flo_density)
+  
+  
+  #Ref day to start the year on June 1st (day 152)
+  if(ref_day != 1) {
+    
+    flo_density_data$ref_day <- ifelse(flo_density_data$day_of_year >= ref_day, 
+                                       flo_density_data$day_of_year - (ref_day - 1),
+                                       flo_density_data$day_of_year + (366 - ref_day))
+    
+  }
+  write.csv(flo_density_data, paste0(directory_name, "/", po_name, "_density.csv"),row.names = FALSE) 
+  
+  flo_density_plot <- flo_density_data[order(flo_density_data$ref_day),]
+  print(head(flo_density_plot))
+  
+  
+  if(ref_day != 1) {
+    
+    x_obs <- ifelse(x_obs >= ref_day, 
+                                       x_obs - (ref_day - 1),
+                                       x_obs + (366 - ref_day))
+  }
+  print(x_obs)
+  
+  z_axis_ticks <- seq(0, round(max(y_obs)), round(max(y_obs)) / 10) 
+  
+  ##### Write out plot to PDF #####
+  pdf(paste0(directory_name, "/", po_name, ".plot.pdf"))
+  par(mar=c(5,5,5,5), cex=1, xpd = TRUE)
+  plot(flo_density_plot$ref_day,
+       flo_density_plot$z_sim * max(y_obs),
+       type = 'l',
+       lty = 2,
+       lwd = 2,
+       ylim = c(0, max(y_obs) * 1.05),
+       ylab = expression(paste("Flower density")),
+       xlab = "Season",
+       xaxt = 'n',
+       col = "darkgrey")
+  
+  axis(1, at = c(45, 136, 226, 316), 
+       labels = c("Winter",
+                  "Spring",
+                  "Summer",
+                  "Autumn"),
+       col = "white")
+  
+  axis(1, at = c(0, 91, 182, 273, 365), labels = c("", "", "", "", ""))
+  
+  axis(4, at = z_axis_ticks, labels = seq(0, 1, 0.1), col = "darkgrey", col.axis = "darkgrey")
+  mtext("Likelihood of flowering (rescaled to maximum flower density)", side = 4, line = 2.8, col = "darkgrey")
+  
+  points(flo_density_plot$ref_day,
+         flo_density_plot$y_sim,
+         type = 'l',
+         lty = 2,
+         lwd = 2,
+         col = "darkred")
+  
+  points(flo_density_plot$ref_day,
+         flo_density_plot$mean_pred,
+         type = 'l',
+         lwd = 2)
+  
+  points(x_obs,
+         y_obs,
+         pch=8,
+         cex = 1.1)
+  
+  legend("top", inset = c(0, -0.18),
+         # adj = c(-0.5, 1.1),
+         #  text.width = 340,      
+         legend=c("Mean predicted flower density", "Cyclical estimate of flower density", "Likelihood of flowering", "Observed flower density"),
+         col = c("black", "darkred", "darkgrey", "black"), 
+         cex = 0.8,
+         lty = c(1, 2, 2, 0),
+         pch = c(NA, NA, NA, 8))
+  
+  dev.off()
+  
+  Flower_density(data = cvdata,
+               po_number = 1,
+               ref_day = 152,
+               directory_name = "/Users/blythevogel/Documents/Masters Research/Data/Modelling_Data_2.0/Final_Flower_Density")
+  
+  #Repeat for each of the 12 pollinator observatories
+               
