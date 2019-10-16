@@ -1,0 +1,110 @@
+
+library(reshape2)
+library(jagsUI)
+library(xlsx)
+library(ggplot2)
+
+#Read in insect data
+idata = read.csv("insect_data_v17.csv", 
+                 header=TRUE, sep=",", na.strings=TRUE)
+head(idata)
+
+##Initial addtions and modification to insect data##
+
+#1. Add occupancy column
+idata$occ = 1
+
+##Getting the data in the right shape for GLMM
+
+#Reshape insect data into 2D array
+ybug = dcast(idata, po_name + po + point2 ~ species_code , value.var="occ", fill=0, fun=min) 
+
+#Check to see if there is anything not 0 or 1
+any(ybug==0) & any(ybug==1)
+
+#Remove pollinator observatories so it matches the osbervatories in cvdata. 
+#Make sure this subset is the same as in line 32
+ybug <- subset(ybug, ybug$po != "3")
+
+#Select targeted insect species. HYM094 = European honeybee. This will change depending on the insect
+bugmat = ybug[,c("po_name","po", "point2","HYM094")]
+
+#Assign continuous random effects numbering to pollinator observatories
+ipo = as.factor(bugmat$po)
+levels(ipo) = 1:length(levels(ipo))
+bugmat$ipo = as.numeric(ipo)
+
+##Prepare data for JAGS
+
+#Number of inference points
+n = length(bugmat$point2)
+
+#Ppollinator observatories data
+ipo = bugmat[,"ipo"]
+ipo = as.numeric(paste(ipo))
+npo = length(unique(ipo))
+
+#Species occurrence data
+bug = bugmat$HYM094
+
+#Data for model
+jdata = list(n=n, bug=bug, ipo=ipo, npo=npo) 
+
+#Write the model code to a text file 
+cat("
+    model{
+    
+    #Priors
+    gmu ~ dnorm(0,0.01) 
+    gtau <- pow(gsigma, -2)
+    gsigma ~ dunif(0,10)
+    
+    #Inference points loop     
+    for (i in 1:n) {
+      logit(psi[i]) <- u[ipo[i]]
+      bug[i] ~ dbern(psi[i])
+    }
+
+    #POs as random effects
+    for (i in 1:npo){
+      u[i] ~ dnorm(gmu,gtau)
+    }
+    
+    #Derived quantities | Back transform data
+    gocc <- 1/(1+exp(-(gmu)))
+    for (i in 1:npo){
+      occ[i] <- 1/(1+exp(-(u[i])))
+    }
+
+    #Finish writing the text file into a document we call modelem.txt
+    }
+    ", file="msom.txt")
+
+#Specify the parameters to be monitored
+params = c("gocc","occ")
+
+inits = function() {
+  list(gmu=rnorm(1), gsigma=runif(1), u=rnorm(npo))
+}
+
+#MCMC settings
+ni = 5000
+nt = 1
+nb = 500
+nc = 2
+
+#Call JAGS from R
+mod = jags(jdata, inits, params, "msom.txt", 
+           n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb)
+names(mod)
+print(mod, 2)
+
+file <- paste0("Final_Model_outputs_LEP900", gsub(" ", "_", date()), ".xlsx")
+write.xlsx("model_run", 
+           sheetName = "Metadata",
+           file = file)
+
+write.xlsx(data.frame(mod$summary), 
+           file = file,
+           sheetName = "LEP900.2",
+           append = TRUE)
