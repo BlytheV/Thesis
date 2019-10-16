@@ -25,7 +25,7 @@ ybug = dcast(idata, po_name + po + point2 ~ species_code , value.var="occ", fill
 #Check to see if there is anything not 0 or 1
 any(ybug==0) & any(ybug==1)
 
-#Subset to just include the pollinator observatories the European honeybee has been seen on. Thus remove Brachyscome basaltica (po 3). This will differ for each insect
+#Subset to just include the pollinator observatories the European honeybee has been seen on. Remove Brachyscome basaltica (po 3). This will differ for each insect
 ybug <- subset(ybug, ybug$po != "3")
 
 #Select targeted insect species. HYM094 = European honeybee. This will change depending on the insect
