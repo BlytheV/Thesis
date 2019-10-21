@@ -1,10 +1,13 @@
 
-##GLMM Model as described in section 2.3.1. Example here is for the European honeybee. Code was adapted for the other five insects as specified
+##GLMM Model as described in section 2.3.1. 
+#Example here is for the European honeybee. Code was adapted for the other five insects as specified
 
 library(reshape2)
 library(jagsUI)
 library(xlsx)
 library(ggplot2)
+
+##Data available on request to run this model##
 
 #Read in insect data
 idata = read.csv("insect_data_v17.csv", 
