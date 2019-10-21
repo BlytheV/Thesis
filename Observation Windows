@@ -1,4 +1,8 @@
-##Code to create the observation window plots. One example of an insect not affected by flower density (blue-banded bees) and one of an insect affected by flower density (European honeybee)
+##Code to create the observation window plots. 
+#One example of an insect not affected by flower density (blue-banded bees) and 
+#one of an insect affected by flower density (European honeybee)
+
+##Data available on request to run this model##
 
 ##Plot 1. Blue-banded bees plot. Not affected by flower density, so no gradient necessary 
 #Plot 1 adapted to also plot other native bees, and other native butterflies
