@@ -3,6 +3,8 @@
 library(jagsUI)
 library(scales)
 
+##Data available on request to run this model##
+
 #Read in the flower density data
 cvdata = read.csv("CV_data_v15.csv", 
                   header = TRUE,
